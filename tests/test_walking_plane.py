@@ -60,6 +60,12 @@ class TestWalkingPlane(PlaneTestCase):
         self.assertIs(tiny.can_step_over(5e-324), False)
         self.assertRefusedWithoutChanges(tiny, PlaneObstacleTooHigh, tiny.step_over, 5e-324)
 
+        # Regression D-01: обязательные float-атрибуты не вмещают большой int.
+        for field in ("mass_kg", "leg_length_m", "max_speed_kmh"):
+            with self.subTest(large_integer_field=field):
+                with self.assertRaises(ValueError):
+                    new_plane(**{field: 10**400})
+
     def test_TC_04_attributes_read_only(self):
         """TC-04: все публичные атрибуты защищены от присваивания и удаления."""
         # Arrange
@@ -137,6 +143,19 @@ class TestWalkingPlane(PlaneTestCase):
         slow = new_plane(max_speed_kmh=1e-308)
         self.assertRefusedWithoutChanges(slow, ValueError, slow.move, 10, "road")
 
+        # Regression D-01/D-02: приоритеты сохраняются до вычислений.
+        p = new_plane()
+        self.assertRefusedWithoutChanges(p, PlaneUnsupportedTerrain, p.move, 10**400, "air")
+        self.assertRefusedWithoutChanges(p, ValueError, p.move, 10**400, "road")
+        p.damage_legs()
+        self.assertRefusedWithoutChanges(p, PlaneLegsDamaged, p.move, 10**400, "road")
+        tiny_speed = new_plane(max_speed_kmh=5e-324, energy=0)
+        self.assertRefusedWithoutChanges(tiny_speed, ValueError, tiny_speed.move, 5e-324, "rough")
+        self.assertHours(tiny_speed.move(5e-324, "road"), 1.0)
+        tiny_speed.damage_legs()
+        self.assertRefusedWithoutChanges(tiny_speed, PlaneLegsDamaged, tiny_speed.move, 5e-324, "rough")
+        self.assertRefusedWithoutChanges(tiny_speed, PlaneUnsupportedTerrain, tiny_speed.move, 5e-324, "water")
+
     def test_TC_08_move_domain_errors(self):
         """TC-08: запрещённая среда, ноги, нехватка и порядок доменных отказов."""
         # Arrange
@@ -183,6 +202,12 @@ class TestWalkingPlane(PlaneTestCase):
         slow = new_plane(max_speed_kmh=1e-308)
         self.assertAlmostEqual(slow.calculate_energy(10, "road"), 20, delta=1e-7)
 
+        self.assertRefusedWithoutChanges(p, ValueError, p.calculate_energy, 10**400, "road")
+        tiny_speed = new_plane(max_speed_kmh=5e-324, energy=0)
+        before = tiny_speed.get_status()
+        self.assertAlmostEqual(tiny_speed.calculate_energy(1, "rough"), 4.0, delta=1e-7)
+        self.assertEqual(tiny_speed.get_status(), before)
+
     def test_TC_10_obstacle_query(self):
         """TC-10: предикат учитывает высоту, ноги и энергию, не меняя состояние."""
         for energy, height, intact, expected in (
@@ -213,6 +238,11 @@ class TestWalkingPlane(PlaneTestCase):
 
         large = new_plane(leg_length_m=1e308)
         self.assertRefusedWithoutChanges(large, ValueError, large.can_step_over, 5e307)
+
+        p = new_plane()
+        before = p.get_status()
+        self.assertIs(p.can_step_over(10**400), False)
+        self.assertEqual(p.get_status(), before)
 
     def test_TC_11_step_success(self):
         """TC-11: манёвр на пределе высоты и энергии, возврат None."""
@@ -255,6 +285,11 @@ class TestWalkingPlane(PlaneTestCase):
         self.assertRefusedWithoutChanges(large, PlaneObstacleTooHigh, large.step_over, 1e308)
         self.assertRefusedWithoutChanges(large, ValueError, large.step_over, 5e307)
 
+        p = new_plane()
+        self.assertRefusedWithoutChanges(p, PlaneObstacleTooHigh, p.step_over, 10**400)
+        p.damage_legs()
+        self.assertRefusedWithoutChanges(p, PlaneLegsDamaged, p.step_over, 10**400)
+
     def test_TC_13_refuel(self):
         """TC-13: заправка, предел 100, неверные аргументы, повреждённые ноги."""
         # Arrange
@@ -263,7 +298,7 @@ class TestWalkingPlane(PlaneTestCase):
         # Act / Assert
         self.assertIsNone(p.refuel(50))
         self.assertPlaneState(p, position=0, energy=70, intact=False)
-        for amount in (1000, 1e308, 1):
+        for amount in (1000, 1e308, 1, 10**400):
             with self.subTest(amount=amount):
                 self.assertIsNone(p.refuel(amount))
                 self.assertPlaneState(p, position=0, energy=100, intact=False)
