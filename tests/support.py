@@ -30,3 +30,13 @@ class PlaneTestCase(unittest.TestCase):
     def assertHours(self, actual, expected):
         self.assertAlmostEqual(actual, expected, delta=1e-7,
                                msg="Время прохождения участка неверно")
+
+    def assertStatusValues(self, actual, expected):
+        self.assertEqual(actual.keys(), expected.keys())
+        for key, value in expected.items():
+            with self.subTest(attribute=key):
+                self.assertIs(type(actual[key]), type(value))
+                if type(value) is float:
+                    self.assertAlmostEqual(actual[key], value, delta=1e-7)
+                else:
+                    self.assertEqual(actual[key], value)

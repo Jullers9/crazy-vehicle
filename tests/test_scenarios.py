@@ -76,7 +76,7 @@ class TestJourneys(PlaneTestCase):
         self.assertRefusedWithoutChanges(p, PlaneLegsDamaged, pilot.перешагнуть, 0.5)
         # When: расчёт и заправка доступны при поломке.
         before = p.get_status()
-        self.assertEqual(pilot.оценить_расход_на_камнях(3), 12)
+        self.assertAlmostEqual(pilot.оценить_расход_на_камнях(3), 12, delta=1e-7)
         self.assertEqual(p.get_status(), before)
         pilot.заправиться(100)
         # Then
@@ -97,7 +97,8 @@ class TestJourneys(PlaneTestCase):
         pilot = Pilot(p)
         # When / Then: крылья не позволяют летать и плавать.
         for command in (pilot.идти_по_воде, pilot.взлететь):
-            self.assertRefusedWithoutChanges(p, PlaneUnsupportedTerrain, command, 1)
+            with self.subTest(command=command.__name__):
+                self.assertRefusedWithoutChanges(p, PlaneUnsupportedTerrain, command, 1)
         self.assertIs(pilot.проверить_преграду(1.01), False)
         self.assertRefusedWithoutChanges(p, PlaneObstacleTooHigh, pilot.перешагнуть, 1.01)
         # When: препятствие точно на пределе.
